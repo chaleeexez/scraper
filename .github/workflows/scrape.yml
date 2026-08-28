@@ -5,6 +5,15 @@ on:
     - cron: '0 * * * *'  # ตั้งเวลารันอัตโนมัติทุกๆ 1 ชั่วโมง
   workflow_dispatch:     # อนุญาตให้กดปุ่มสั่งรันเองได้แบบ Manual
 
+# กำหนดสิทธิ์ให้ Actions สามารถ Push ไฟล์ CSV กลับเข้า Repository ได้ (รองรับ Policy ใหม่)
+permissions:
+  contents: write
+
+# ป้องกัน Job รันซ้อนกันกรณีที่รอบก่อนยังทำงานไม่เสร็จ
+concurrency:
+  group: scrape-thaiwater
+  cancel-in-progress: true
+
 jobs:
   scrape:
     runs-on: ubuntu-latest
