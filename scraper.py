@@ -18,9 +18,9 @@ def scrape_data():
 
     page.goto(url, wait_until="networkidle", timeout=60000)
 
-    # เช็กให้แน่ใจว่าแท็ก <table> ปรากฏบน DOM แน่นอนก่อนดึงข้อมูล
-    page.wait_for_selector("table", timeout=15000)
-    page.wait_for_timeout(3000)
+    # 1. รอจนกว่าตารางจะมีแถวข้อมูลจริงปรากฏขึ้นอย่างน้อย 1 แถว (ไม่นับ Header)
+    page.wait_for_selector("table tr:nth-child(2)", timeout=15000)
+    page.wait_for_timeout(2000)
 
     html_content = page.content()
     browser.close()
@@ -30,6 +30,14 @@ def scrape_data():
     raise RuntimeError("ไม่พบตารางข้อมูลใน HTML ของ thaiwater.net")
 
   df = dfs[0]
+
+  # 2. ตรวจสอบชื่อคอลัมน์สำคัญ ป้องกันเว็บเปลี่ยนโครงสร้างตาราง
+  expected_cols = {"ชื่อสถานี", "ที่ตั้ง"}
+  if not expected_cols.issubset(df.columns):
+    raise RuntimeError(
+        f"โครงสร้างตารางเปลี่ยนไปจากเดิม คอลัมน์ที่พบ: {list(df.columns)}"
+    )
+
   df = df.iloc[:, :4]
 
   output_file = "thaiwater_rainfall_live.csv"
