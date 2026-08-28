@@ -1,5 +1,6 @@
 import io
 import logging
+import os
 import time
 import pandas as pd
 from playwright.sync_api import sync_playwright
@@ -33,8 +34,8 @@ def scrape_data(max_retries=3, delay=5):
         # 1. เปลี่ยนเป็น domcontentloaded เพื่อไม่ให้ค้างรอสคริปต์เบื้องหลัง
         page.goto(url, wait_until="domcontentloaded", timeout=60000)
 
-        # 2. รอจนกระทั่งโครงสร้างตารางข้อมูลแสดงผลออกมาจริงๆ
-        page.wait_for_selector("table tr:nth-child(2)", timeout=30000)
+        # 2. รอโครงสร้างตารางข้อมูล (ใช้ selector "table" เพื่อความยืดหยุ่นสูง)
+        page.wait_for_selector("table", timeout=30000)
         page.wait_for_timeout(3000)
         html_content = page.content()
 
@@ -60,7 +61,11 @@ def scrape_data(max_retries=3, delay=5):
         )
 
       df = target_df.iloc[:, :4]
-      output_file = "thaiwater_rainfall_live.csv"
+
+      # ผูก Absolute Path กับไดเรกทอรีของไฟล์ scraper.py
+      base_dir = os.path.dirname(os.path.abspath(__file__))
+      output_file = os.path.join(base_dir, "thaiwater_rainfall_live.csv")
+
       df.to_csv(output_file, index=False, encoding="utf-8-sig")
       logger.info(f"Successfully updated {output_file}")
       return
