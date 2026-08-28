@@ -20,7 +20,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt feedparser beautifulsoup4
+          pip install -r requirements.txt requests feedparser beautifulsoup4 pandas
           playwright install --with-deps chromium
 
       - name: Run Scraper
