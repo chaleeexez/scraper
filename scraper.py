@@ -1,3 +1,4 @@
+import io
 import pandas as pd
 from playwright.sync_api import sync_playwright
 
@@ -11,19 +12,21 @@ def scrape_data():
     page = browser.new_page(
         user_agent=(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            " (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
     )
-    page.goto(url, wait_until="domcontentloaded")
 
-    try:
-      page.wait_for_selector("table", timeout=15000)
-    except Exception:
-      page.wait_for_timeout(5000)
+    # 1. โหลดหน้าเว็บและรอจนกว่าการส่ง Request ดึงข้อมูลหลังบ้านจะนิ่ง (networkidle)
+    page.goto(url, wait_until="networkidle", timeout=60000)
+
+    # 2. หน่วงเวลาเพิ่ม 5 วินาที เพื่อให้ตารางใส่ข้อมูลฝนจริงแทนคำว่า "ไม่มีข้อมูล"
+    page.wait_for_timeout(5000)
 
     html_content = page.content()
     browser.close()
 
-  dfs = pd.read_html(html_content)
+  # 3. แปลง HTML เป็น Pandas DataFrame
+  dfs = pd.read_html(io.StringIO(html_content))
   df = dfs[0]
 
   # บันทึกลง CSV
