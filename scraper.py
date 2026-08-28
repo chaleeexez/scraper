@@ -16,18 +16,18 @@ def scrape_data():
         )
     )
 
-    # 1. โหลดหน้าเว็บและรอจนกว่าการส่ง Request ดึงข้อมูลหลังบ้านจะนิ่ง (networkidle)
     page.goto(url, wait_until="networkidle", timeout=60000)
-
-    # 2. หน่วงเวลาเพิ่ม 5 วินาที เพื่อให้ตารางใส่ข้อมูลฝนจริงแทนคำว่า "ไม่มีข้อมูล"
     page.wait_for_timeout(5000)
 
     html_content = page.content()
     browser.close()
 
-  # 3. แปลง HTML เป็น Pandas DataFrame
+  # แปลง HTML เป็น Pandas DataFrame
   dfs = pd.read_html(io.StringIO(html_content))
   df = dfs[0]
+
+  # [วางตรงนี้] คลีนเลือกเฉพาะ 4 คอลัมน์แรก (ตัด Unnamed: 4 ออก)
+  df = df.iloc[:, :4]
 
   # บันทึกลง CSV
   output_file = "thaiwater_rainfall_live.csv"
