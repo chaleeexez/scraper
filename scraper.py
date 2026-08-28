@@ -4,7 +4,7 @@ import time
 import pandas as pd
 from playwright.sync_api import sync_playwright
 
-# ตั้งค่า Logging ให้สอดคล้องกับ flask_app.py
+# ตั้งค่า Logging ให้สอดคล้องกับระบบ
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -29,11 +29,13 @@ def scrape_data(max_retries=3, delay=5):
                 " (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             )
         )
-        page.goto(url, wait_until="networkidle", timeout=60000)
 
-        # รอจนมีแถวข้อมูลในตาราง
-        page.wait_for_selector("table tr:nth-child(2)", timeout=15000)
-        page.wait_for_timeout(2000)
+        # 1. เปลี่ยนเป็น domcontentloaded เพื่อไม่ให้ค้างรอสคริปต์เบื้องหลัง
+        page.goto(url, wait_until="domcontentloaded", timeout=60000)
+
+        # 2. รอจนกระทั่งโครงสร้างตารางข้อมูลแสดงผลออกมาจริงๆ
+        page.wait_for_selector("table tr:nth-child(2)", timeout=30000)
+        page.wait_for_timeout(3000)
         html_content = page.content()
 
         browser.close()
@@ -45,7 +47,6 @@ def scrape_data(max_retries=3, delay=5):
 
       target_df = None
       for df_candidate in dfs:
-        # ยุบ MultiIndex หากฝั่งเว็บปรับ Header ซ้อนชั้น
         if isinstance(df_candidate.columns, pd.MultiIndex):
           df_candidate.columns = df_candidate.columns.get_level_values(-1)
 
@@ -72,7 +73,6 @@ def scrape_data(max_retries=3, delay=5):
         logger.error(f"Scraper failed after {max_retries} attempts: {e}")
         raise RuntimeError(f"Scraper failed after {max_retries} attempts: {e}")
     finally:
-      # บังคับคืนทรัพยากรเบราว์เซอร์เสมอ ไม่ว่าจะสำเร็จหรือเกิด Error
       if browser:
         try:
           browser.close()
