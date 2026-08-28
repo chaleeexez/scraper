@@ -1,10 +1,13 @@
 import io
+import json
 import logging
 import time
+import feedparser
 import pandas as pd
+from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
+import requests
 
-# ตั้งค่า Logging ให้สอดคล้องกับ flask_app.py
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -12,7 +15,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def scrape_data(max_retries=3, delay=5):
+def scrape_rain_data(max_retries=3, delay=5):
   url = "https://www.thaiwater.net/weather/rainfall"
 
   for attempt in range(1, max_retries + 1):
@@ -31,7 +34,6 @@ def scrape_data(max_retries=3, delay=5):
         )
         page.goto(url, wait_until="networkidle", timeout=60000)
 
-        # รอจนมีแถวข้อมูลในตาราง
         page.wait_for_selector("table tr:nth-child(2)", timeout=15000)
         page.wait_for_timeout(2000)
         html_content = page.content()
@@ -45,7 +47,6 @@ def scrape_data(max_retries=3, delay=5):
 
       target_df = None
       for df_candidate in dfs:
-        # ยุบ MultiIndex หากฝั่งเว็บปรับ Header ซ้อนชั้น
         if isinstance(df_candidate.columns, pd.MultiIndex):
           df_candidate.columns = df_candidate.columns.get_level_values(-1)
 
@@ -65,14 +66,14 @@ def scrape_data(max_retries=3, delay=5):
       return
 
     except Exception as e:
-      logger.warning(f"Attempt {attempt} failed: {e}")
+      logger.warning(f"Rain Scraper Attempt {attempt} failed: {e}")
       if attempt < max_retries:
         time.sleep(delay)
       else:
-        logger.error(f"Scraper failed after {max_retries} attempts: {e}")
-        raise RuntimeError(f"Scraper failed after {max_retries} attempts: {e}")
+        logger.error(
+            f"Rain Scraper failed after {max_retries} attempts: {e}"
+        )
     finally:
-      # บังคับคืนทรัพยากรเบราว์เซอร์เสมอ ไม่ว่าจะสำเร็จหรือเกิด Error
       if browser:
         try:
           browser.close()
@@ -80,5 +81,55 @@ def scrape_data(max_retries=3, delay=5):
           pass
 
 
+def scrape_oil_price():
+  url = "https://www.bangchak.co.th/th/rss/oilprice"
+  headers = {
+      "User-Agent": (
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      )
+  }
+
+  logger.info("Fetching Oil Price RSS from Bangchak...")
+  try:
+    res = requests.get(url, headers=headers, timeout=15)
+    if res.status_code != 200:
+      logger.error(f"Failed to fetch oil price RSS: HTTP {res.status_code}")
+      return
+
+    feed = feedparser.parse(res.text)
+    if not feed.entries:
+      logger.error("No entries found in oil price RSS")
+      return
+
+    latest_entry = feed.entries[0]
+    content = latest_entry.get("summary", "") or latest_entry.get(
+        "description", ""
+    )
+    soup = BeautifulSoup(content, "html.parser")
+
+    oil_data = []
+    rows = soup.find_all("tr")
+    for row in rows:
+      cols = [td.get_text(strip=True) for td in row.find_all(["td", "th"])]
+      if len(cols) >= 2:
+        name = cols[0]
+        if "ดีเซล" in name or "Diesel" in name:
+          today_price = cols[1]
+          tomorrow_price = cols[2] if len(cols) >= 3 else ""
+          oil_data.append({
+              "name": name,
+              "today": today_price,
+              "tomorrow": tomorrow_price,
+          })
+
+    with open("oil_price.json", "w", encoding="utf-8") as f:
+      json.dump(oil_data, f, ensure_ascii=False, indent=2)
+    logger.info("Successfully updated oil_price.json")
+
+  except Exception as e:
+    logger.error(f"Error scraping oil price: {e}")
+
+
 if __name__ == "__main__":
-  scrape_data()
+  scrape_rain_data()
+  scrape_oil_price()
