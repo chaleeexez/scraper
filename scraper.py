@@ -1,6 +1,7 @@
 import io
 import json
 import logging
+import os
 import time
 import feedparser
 import pandas as pd
@@ -90,44 +91,42 @@ def scrape_oil_price():
   }
 
   logger.info("Fetching Oil Price RSS from Bangchak...")
+  oil_data = []
+
   try:
     res = requests.get(url, headers=headers, timeout=15)
-    if res.status_code != 200:
+    if res.status_code == 200:
+      feed = feedparser.parse(res.text)
+      if feed.entries:
+        latest_entry = feed.entries[0]
+        content = latest_entry.get("summary", "") or latest_entry.get(
+            "description", ""
+        )
+        soup = BeautifulSoup(content, "html.parser")
+
+        rows = soup.find_all("tr")
+        for row in rows:
+          cols = [td.get_text(strip=True) for td in row.find_all(["td", "th"])]
+          if len(cols) >= 2:
+            name = cols[0]
+            if "ดีเซล" in name or "Diesel" in name:
+              today_price = cols[1]
+              tomorrow_price = cols[2] if len(cols) >= 3 else ""
+              oil_data.append({
+                  "name": name,
+                  "today": today_price,
+                  "tomorrow": tomorrow_price,
+              })
+    else:
       logger.error(f"Failed to fetch oil price RSS: HTTP {res.status_code}")
-      return
-
-    feed = feedparser.parse(res.text)
-    if not feed.entries:
-      logger.error("No entries found in oil price RSS")
-      return
-
-    latest_entry = feed.entries[0]
-    content = latest_entry.get("summary", "") or latest_entry.get(
-        "description", ""
-    )
-    soup = BeautifulSoup(content, "html.parser")
-
-    oil_data = []
-    rows = soup.find_all("tr")
-    for row in rows:
-      cols = [td.get_text(strip=True) for td in row.find_all(["td", "th"])]
-      if len(cols) >= 2:
-        name = cols[0]
-        if "ดีเซล" in name or "Diesel" in name:
-          today_price = cols[1]
-          tomorrow_price = cols[2] if len(cols) >= 3 else ""
-          oil_data.append({
-              "name": name,
-              "today": today_price,
-              "tomorrow": tomorrow_price,
-          })
-
-    with open("oil_price.json", "w", encoding="utf-8") as f:
-      json.dump(oil_data, f, ensure_ascii=False, indent=2)
-    logger.info("Successfully updated oil_price.json")
-
   except Exception as e:
     logger.error(f"Error scraping oil price: {e}")
+
+  # สร้างไฟล์ oil_price.json เสมอ (แม้อ่านข้อมูลไม่ได้) เพื่อป้องกันปัญหา Git Error
+  if oil_data or not os.path.exists("oil_price.json"):
+    with open("oil_price.json", "w", encoding="utf-8") as f:
+      json.dump(oil_data, f, ensure_ascii=False, indent=2)
+    logger.info("Successfully processed oil_price.json")
 
 
 if __name__ == "__main__":
