@@ -17,19 +17,21 @@ def scrape_data():
     )
 
     page.goto(url, wait_until="networkidle", timeout=60000)
-    page.wait_for_timeout(5000)
+
+    # เช็กให้แน่ใจว่าแท็ก <table> ปรากฏบน DOM แน่นอนก่อนดึงข้อมูล
+    page.wait_for_selector("table", timeout=15000)
+    page.wait_for_timeout(3000)
 
     html_content = page.content()
     browser.close()
 
-  # แปลง HTML เป็น Pandas DataFrame
   dfs = pd.read_html(io.StringIO(html_content))
-  df = dfs[0]
+  if not dfs:
+    raise RuntimeError("ไม่พบตารางข้อมูลใน HTML ของ thaiwater.net")
 
-  # [วางตรงนี้] คลีนเลือกเฉพาะ 4 คอลัมน์แรก (ตัด Unnamed: 4 ออก)
+  df = dfs[0]
   df = df.iloc[:, :4]
 
-  # บันทึกลง CSV
   output_file = "thaiwater_rainfall_live.csv"
   df.to_csv(output_file, index=False, encoding="utf-8-sig")
   print(f"Successfully updated {output_file}")
