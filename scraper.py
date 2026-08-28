@@ -1,11 +1,9 @@
 import io
 import logging
-import os
 import time
 import pandas as pd
 from playwright.sync_api import sync_playwright
 
-# ตั้งค่า Logging ให้สอดคล้องกับระบบ
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -31,12 +29,20 @@ def scrape_data(max_retries=3, delay=5):
             )
         )
 
-        # 1. เปลี่ยนเป็น domcontentloaded เพื่อไม่ให้ค้างรอสคริปต์เบื้องหลัง
         page.goto(url, wait_until="domcontentloaded", timeout=60000)
 
-        # 2. รอโครงสร้างตารางข้อมูล (ใช้ selector "table" เพื่อความยืดหยุ่นสูง)
-        page.wait_for_selector("table", timeout=30000)
-        page.wait_for_timeout(3000)
+        # บังคับรอจนกว่าแถว "ไม่มีข้อมูล" จะหายไป และมีแถวข้อมูลจริงมากกว่า 3 แถว
+        try:
+          page.wait_for_function(
+              "() => document.querySelectorAll('table tr').length > 3 &&"
+              " !document.querySelector('table').innerText.includes('ไม่มีข้อมูล')",
+              timeout=30000,
+          )
+        except Exception:
+          # หากหน้านั้นโหลดช้า ให้รอเพิ่ม 5 วินาที
+          page.wait_for_timeout(5000)
+
+        page.wait_for_timeout(2000)
         html_content = page.content()
 
         browser.close()
@@ -52,20 +58,19 @@ def scrape_data(max_retries=3, delay=5):
           df_candidate.columns = df_candidate.columns.get_level_values(-1)
 
         if {"ชื่อสถานี", "ที่ตั้ง"}.issubset(set(df_candidate.columns)):
-          target_df = df_candidate
-          break
+          # กรองเอาเฉพาะแถวที่มีข้อมูลจริง ตัดแถว 'ไม่มีข้อมูล' ออก
+          filtered_df = df_candidate[
+              df_candidate["ชื่อสถานี"] != "ไม่มีข้อมูล"
+          ]
+          if not filtered_df.empty:
+            target_df = filtered_df
+            break
 
       if target_df is None:
-        raise RuntimeError(
-            "โครงสร้างตารางเปลี่ยน ไม่พบตารางที่มีคอลัมน์ที่กำหนด"
-        )
+        raise RuntimeError("ไม่พบข้อมูลฝนในตาราง หรือตารางยังโหลดไม่เสร็จ")
 
       df = target_df.iloc[:, :4]
-
-      # ผูก Absolute Path กับไดเรกทอรีของไฟล์ scraper.py
-      base_dir = os.path.dirname(os.path.abspath(__file__))
-      output_file = os.path.join(base_dir, "thaiwater_rainfall_live.csv")
-
+      output_file = "thaiwater_rainfall_live.csv"
       df.to_csv(output_file, index=False, encoding="utf-8-sig")
       logger.info(f"Successfully updated {output_file}")
       return
