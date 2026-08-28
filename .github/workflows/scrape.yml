@@ -20,15 +20,15 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt requests feedparser beautifulsoup4 pandas
+          pip install pandas playwright requests
           playwright install --with-deps chromium
 
       - name: Run Scraper
         run: python scraper.py
 
-      - name: Commit and push updated CSV and JSON
+      - name: Commit and push updated CSV
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update rainfall and oil price data" && git push)
+          git add thaiwater_rainfall_live.csv
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update rainfall data" && git push)
