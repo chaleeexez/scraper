@@ -2,7 +2,7 @@ name: Fetch Dam Data
 
 on:
   schedule:
-    - cron: '0 1 * * *' # รันวันละ 1 ครั้ง ตอน 08:00 น. ไทย (01:00 UTC)
+    - cron: '0 1 * * *'
   workflow_dispatch:
 
 permissions:
@@ -21,11 +21,21 @@ jobs:
 
       - name: Fetch Dam Data
         run: |
-          curl -sf -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
-            "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/dam_daily" \
-            -o dam_data.tmp.json
-          jq empty dam_data.tmp.json
-          mv dam_data.tmp.json dam_data.json
+          HTTP_STATUS=$(curl -s -o dam_data.tmp.json -w "%{http_code}" \
+            --retry 3 --retry-delay 5 \
+            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+            "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/dam_daily")
+
+          echo "HTTP Status Code: $HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" -eq 200 ] && jq empty dam_data.tmp.json 2>/dev/null; then
+            mv dam_data.tmp.json dam_data.json
+            echo "Data fetched successfully."
+          else
+            echo "Failed to fetch data (Status $HTTP_STATUS), skipping update."
+            rm -f dam_data.tmp.json
+            exit 0
+          fi
 
       - name: Commit and Push
         run: |
